@@ -81,7 +81,7 @@ async def analyze_log(
 ):
     text = ""
 
-    if log_file is not None:
+    if log_file is not None and log_file.filename:
         content = await log_file.read()
         if len(content) > MAX_UPLOAD_BYTES:
             raise HTTPException(status_code=413, detail="Arquivo excede o limite de 50 MB")

@@ -5,17 +5,25 @@ _CHAN_SIP_READ = re.compile(r"<---\s+SIP read from\s+\S+", re.IGNORECASE)
 _CHAN_SIP_SEND = re.compile(r"--->\s+SIP (?:send|message) to\s+\S+", re.IGNORECASE)
 _CHAN_PJSIP_IN = re.compile(r"<---\s+Received SIP (?:request|response|message)", re.IGNORECASE)
 _CHAN_PJSIP_OUT = re.compile(r"--->\s+Sending SIP (?:request|response|message)", re.IGNORECASE)
-_BLOCK_END = re.compile(r"^-{10,}\s*$")
 
-_REQUEST_LINE = re.compile(r"^([A-Z]+)\s+sip[s]?:\S*\s+SIP/2\.0", re.IGNORECASE)
+# Asterisk termina blocos SIP com "---" (chan_sip) ou "---  end  ---" (chan_pjsip).
+# Usamos search() para detectar linhas cujo conteúdo relevante é apenas traços.
+_BLOCK_END = re.compile(r"^\s*-{3,}(\s+end\s+-{3,})?\s*$", re.IGNORECASE)
+
+# Prefixo de log do Asterisk: [2024-05-03 12:00:00] DEBUG[1234][C-00000001] chan_sip.c:
+_ASTERISK_PREFIX = re.compile(
+    r"^\[[\d\-: ]+\]\s+\w+\[\w+\](?:\[[\w\-]+\])?\s+[\w./]+:\s+", re.IGNORECASE
+)
+
+_REQUEST_LINE = re.compile(r"^([A-Z]{3,10})\s+\S+\s+SIP/2\.0", re.IGNORECASE)
 _RESPONSE_LINE = re.compile(r"^SIP/2\.0\s+(\d{3})\s+(.*)", re.IGNORECASE)
 _CALL_ID = re.compile(r"^Call-ID:\s*(.+)", re.IGNORECASE | re.MULTILINE)
 _FROM = re.compile(r"^From:\s*(.+)", re.IGNORECASE | re.MULTILINE)
 _TO = re.compile(r"^To:\s*(.+)", re.IGNORECASE | re.MULTILINE)
 _CSEQ = re.compile(r"^CSeq:\s*(\d+)\s+(\w+)", re.IGNORECASE | re.MULTILINE)
 _REASON = re.compile(r"^Reason:\s*(.+)", re.IGNORECASE | re.MULTILINE)
-_SIP_USER = re.compile(r"sip[s]?:([^@>\s;]+)@", re.IGNORECASE)
-_HANGUP = re.compile(r"Hangup.*?cause\s*[=:]?\s*(\d+)", re.IGNORECASE)
+_SIP_USER = re.compile(r"sip[s]?:([^@>\s;,\"]+)@", re.IGNORECASE)
+_HANGUP = re.compile(r"Hangup.*?cause[=:\s]+(\d+)", re.IGNORECASE)
 _CALL_ID_CONTEXT = re.compile(r"Call-ID[:\s]+(\S+)", re.IGNORECASE)
 
 
@@ -26,6 +34,17 @@ def _is_block_start(line: str) -> bool:
         or _CHAN_PJSIP_IN.search(line)
         or _CHAN_PJSIP_OUT.search(line)
     )
+
+
+def _is_block_end(line: str) -> bool:
+    # Remove prefixo Asterisk antes de verificar se é só traços
+    stripped = _ASTERISK_PREFIX.sub("", line)
+    return bool(_BLOCK_END.match(stripped))
+
+
+def _strip_prefix(line: str) -> str:
+    """Remove prefixo de timestamp do Asterisk se presente."""
+    return _ASTERISK_PREFIX.sub("", line)
 
 
 def _extract_user(header_value: str) -> str:
@@ -39,13 +58,15 @@ def _extract_user(header_value: str) -> str:
 
 
 def _parse_block(block_lines: list[str]) -> dict | None:
-    block = "\n".join(block_lines)
+    # Remove prefixos Asterisk de cada linha do bloco
+    clean_lines = [_strip_prefix(l) for l in block_lines]
+    block = "\n".join(clean_lines)
 
     method = None
     status_code = None
     status_text = None
 
-    for line in block_lines:
+    for line in clean_lines:
         line = line.strip()
         if not line:
             continue
@@ -123,7 +144,8 @@ def parse_asterisk_log(log_text: str) -> dict:
             i += 1
             while i < n:
                 bl = lines[i]
-                if _BLOCK_END.match(bl) or _is_block_start(bl):
+                # Parar no próximo bloco start ou numa linha terminadora
+                if _is_block_start(bl) or _is_block_end(bl):
                     break
                 block_lines.append(bl)
                 i += 1
