@@ -1,0 +1,1116 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VoIP Log Analyzer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0a0d0c;
+      --surface: #111714;
+      --surface2: #182019;
+      --surface3: #1e2820;
+      --border: #243027;
+      --accent: #4ade80;
+      --accent-dim: #22563a;
+      --error: #f87171;
+      --error-dim: #4b1c1c;
+      --warn: #fbbf24;
+      --warn-dim: #44320a;
+      --info: #60a5fa;
+      --info-dim: #1a2d4a;
+      --text: #d4e8d8;
+      --text-dim: #7a9a80;
+      --text-muted: #4a6650;
+      --mono: 'IBM Plex Mono', monospace;
+      --sans: 'IBM Plex Sans', sans-serif;
+    }
+
+    html, body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      font-size: 14px;
+      min-height: 100vh;
+    }
+
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 24px;
+      height: 52px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-family: var(--mono);
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--accent);
+      letter-spacing: -0.02em;
+    }
+
+    .brand-marker {
+      color: var(--accent);
+      font-size: 20px;
+      line-height: 1;
+    }
+
+    .brand-sub {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text-muted);
+      font-weight: 400;
+      margin-left: 4px;
+    }
+
+    .header-spacer { flex: 1; }
+
+    .health-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--text-muted);
+    }
+    .health-dot.ok { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+
+    main {
+      display: grid;
+      grid-template-columns: 1fr 320px;
+      gap: 0;
+      min-height: calc(100vh - 52px);
+    }
+
+    .panel-left {
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .tabs {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+
+    .tab-btn {
+      padding: 12px 20px;
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: var(--text-dim);
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: color 0.15s, border-color 0.15s;
+      letter-spacing: 0.02em;
+    }
+
+    .tab-btn:hover { color: var(--text); }
+    .tab-btn.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+    }
+
+    .tab-pane { display: none; padding: 20px; flex: 1; }
+    .tab-pane.active { display: flex; flex-direction: column; gap: 12px; }
+
+    label {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    textarea {
+      width: 100%;
+      height: 340px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 12px;
+      padding: 12px;
+      resize: vertical;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    textarea:focus { border-color: var(--accent-dim); }
+    textarea::placeholder { color: var(--text-muted); }
+
+    .separator {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .separator::before, .separator::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    .file-drop {
+      border: 1px dashed var(--border);
+      border-radius: 4px;
+      padding: 24px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+      position: relative;
+    }
+
+    .file-drop:hover, .file-drop.drag-over {
+      border-color: var(--accent-dim);
+      background: var(--surface2);
+    }
+
+    .file-drop input[type=file] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+    }
+
+    .file-drop-text {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .file-drop-text strong { color: var(--accent); }
+    .file-name {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--accent);
+      margin-top: 6px;
+    }
+
+    /* Panel right — filters */
+    .panel-right {
+      background: var(--surface);
+      display: flex;
+      flex-direction: column;
+      padding: 20px;
+      gap: 16px;
+      border-top: none;
+    }
+
+    .panel-right h2 {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-muted);
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    input[type=text] {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 12px;
+      padding: 9px 12px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    input[type=text]:focus { border-color: var(--accent-dim); }
+    input[type=text]::placeholder { color: var(--text-muted); }
+
+    .field-group { display: flex; flex-direction: column; gap: 6px; }
+
+    .btn-analyze {
+      margin-top: auto;
+      background: var(--accent);
+      color: #0a0d0c;
+      border: none;
+      border-radius: 4px;
+      padding: 12px 20px;
+      font-family: var(--mono);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s, transform 0.1s;
+      letter-spacing: 0.02em;
+    }
+
+    .btn-analyze:hover { opacity: 0.9; }
+    .btn-analyze:active { transform: scale(0.98); }
+    .btn-analyze:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* Results area */
+    #results {
+      grid-column: 1 / -1;
+      padding: 24px;
+      border-top: 1px solid var(--border);
+    }
+
+    /* Spinner */
+    .spinner {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      padding: 48px;
+      font-family: var(--mono);
+      font-size: 13px;
+      color: var(--text-dim);
+    }
+
+    .spinner-ring {
+      width: 24px; height: 24px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Error banner */
+    .error-banner {
+      background: var(--error-dim);
+      border: 1px solid var(--error);
+      border-radius: 4px;
+      padding: 14px 18px;
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--error);
+      margin-bottom: 16px;
+    }
+
+    /* Summary bar */
+    .summary-bar {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      padding: 12px 16px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      margin-bottom: 20px;
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--text-dim);
+    }
+
+    .summary-bar strong { color: var(--text); }
+
+    .source-badge {
+      background: var(--surface3);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      padding: 2px 8px;
+      font-size: 11px;
+      color: var(--accent);
+      margin-left: auto;
+    }
+
+    /* Empty state */
+    .empty-state {
+      padding: 60px;
+      text-align: center;
+      font-family: var(--mono);
+      font-size: 14px;
+      color: var(--text-muted);
+    }
+
+    .empty-state-code {
+      font-size: 20px;
+      color: var(--border);
+      margin-bottom: 12px;
+    }
+
+    /* Call cards */
+    .calls-list { display: flex; flex-direction: column; gap: 16px; }
+
+    .call-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--border);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .call-card.verdict-error { border-left-color: var(--error); }
+    .call-card.verdict-success { border-left-color: var(--accent); }
+    .call-card.verdict-cancelled { border-left-color: var(--warn); }
+    .call-card.verdict-inconclusive { border-left-color: var(--info); }
+
+    .call-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 16px;
+      background: var(--surface2);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .call-id {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--text);
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .verdict-badge {
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      padding: 3px 8px;
+      border-radius: 3px;
+      flex-shrink: 0;
+    }
+
+    .verdict-badge.error { background: var(--error-dim); color: var(--error); border: 1px solid var(--error); }
+    .verdict-badge.success { background: var(--accent-dim); color: var(--accent); border: 1px solid var(--accent); }
+    .verdict-badge.cancelled { background: var(--warn-dim); color: var(--warn); border: 1px solid var(--warn); }
+    .verdict-badge.inconclusive { background: var(--info-dim); color: var(--info); border: 1px solid var(--info); }
+
+    .call-body { padding: 16px; }
+
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .meta-item { display: flex; flex-direction: column; gap: 3px; }
+
+    .meta-label {
+      font-family: var(--mono);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-muted);
+    }
+
+    .meta-value {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--text);
+      word-break: break-all;
+    }
+
+    .meta-value.dim { color: var(--text-dim); }
+
+    /* Response code pills */
+    .codes-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 16px;
+    }
+
+    .code-pill {
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 500;
+      padding: 3px 8px;
+      border-radius: 3px;
+      border: 1px solid;
+    }
+
+    .code-pill.provisional { background: var(--surface3); border-color: var(--border); color: var(--text-dim); }
+    .code-pill.success { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
+    .code-pill.redirect { background: var(--info-dim); border-color: var(--info); color: var(--info); }
+    .code-pill.client_error,
+    .code-pill.server_error,
+    .code-pill.global_error { background: var(--error-dim); border-color: var(--error); color: var(--error); }
+    .code-pill.cancelled { background: var(--warn-dim); border-color: var(--warn); color: var(--warn); }
+    .code-pill.unknown { background: var(--surface3); border-color: var(--border); color: var(--text-muted); }
+
+    /* Diagnostics */
+    .section-title {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      margin-bottom: 10px;
+      padding-top: 4px;
+    }
+
+    .diagnostic-block {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 14px;
+      margin-bottom: 10px;
+    }
+
+    .diagnostic-block.type-q850 { border-left: 3px solid var(--warn); }
+    .diagnostic-block.type-sip_response { border-left: 3px solid var(--error); }
+
+    .diag-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+
+    .diag-code {
+      font-family: var(--mono);
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--error);
+      flex-shrink: 0;
+    }
+
+    .diag-code.q850 { color: var(--warn); }
+
+    .diag-name {
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text);
+    }
+
+    .diag-desc {
+      font-family: var(--sans);
+      font-size: 13px;
+      color: var(--text-dim);
+      line-height: 1.5;
+      margin-bottom: 10px;
+    }
+
+    .diag-section-label {
+      font-family: var(--mono);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      margin-bottom: 5px;
+    }
+
+    .diag-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      margin-bottom: 10px;
+    }
+
+    .diag-list li {
+      font-family: var(--sans);
+      font-size: 12px;
+      color: var(--text-dim);
+      padding-left: 14px;
+      position: relative;
+      line-height: 1.5;
+    }
+
+    .diag-list li::before {
+      content: '›';
+      position: absolute;
+      left: 0;
+      color: var(--text-muted);
+    }
+
+    .diag-list.solutions li { color: var(--text); }
+    .diag-list.solutions li::before { color: var(--accent); }
+
+    .diag-list code {
+      font-family: var(--mono);
+      font-size: 11px;
+      background: var(--surface3);
+      border: 1px solid var(--border);
+      border-radius: 2px;
+      padding: 1px 5px;
+      color: var(--accent);
+    }
+
+    /* Heuristics */
+    .heuristic-block {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 14px;
+      margin-bottom: 10px;
+    }
+
+    .heuristic-block.severity-alta { border-left: 3px solid var(--error); }
+    .heuristic-block.severity-media { border-left: 3px solid var(--warn); }
+    .heuristic-block.severity-info { border-left: 3px solid var(--info); }
+
+    .heuristic-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+
+    .heuristic-icon { font-size: 14px; }
+
+    .heuristic-title {
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text);
+      flex: 1;
+    }
+
+    .severity-badge {
+      font-family: var(--mono);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 2px 6px;
+      border-radius: 2px;
+    }
+
+    .severity-badge.alta { background: var(--error-dim); color: var(--error); }
+    .severity-badge.media { background: var(--warn-dim); color: var(--warn); }
+    .severity-badge.info { background: var(--info-dim); color: var(--info); }
+
+    .heuristic-desc {
+      font-family: var(--sans);
+      font-size: 13px;
+      color: var(--text-dim);
+      line-height: 1.5;
+      margin-bottom: 10px;
+    }
+
+    /* Raw messages toggle */
+    .toggle-raw-btn {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text-dim);
+      font-family: var(--mono);
+      font-size: 11px;
+      padding: 6px 14px;
+      cursor: pointer;
+      transition: color 0.15s, border-color 0.15s;
+      margin-top: 4px;
+    }
+
+    .toggle-raw-btn:hover { color: var(--text); border-color: var(--text-muted); }
+
+    .raw-messages {
+      display: none;
+      margin-top: 12px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      overflow: auto;
+      max-height: 500px;
+    }
+
+    .raw-messages.open { display: block; }
+
+    .raw-msg {
+      border-bottom: 1px solid var(--border);
+      padding: 10px 14px;
+    }
+
+    .raw-msg:last-child { border-bottom: none; }
+
+    .raw-msg-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 6px;
+    }
+
+    .raw-msg-type {
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 7px;
+      border-radius: 2px;
+    }
+
+    .raw-msg-type.request { background: var(--info-dim); color: var(--info); }
+    .raw-msg-type.response { background: var(--surface3); color: var(--text-dim); }
+    .raw-msg-type.response.ok { background: var(--accent-dim); color: var(--accent); }
+    .raw-msg-type.response.err { background: var(--error-dim); color: var(--error); }
+
+    .raw-msg-meta {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--text-muted);
+    }
+
+    .raw-content {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text-dim);
+      white-space: pre-wrap;
+      word-break: break-all;
+      line-height: 1.5;
+    }
+
+    /* Utility */
+    .divider { height: 1px; background: var(--border); margin: 16px 0; }
+
+    @media (max-width: 900px) {
+      main { grid-template-columns: 1fr; }
+      .panel-left { border-right: none; border-bottom: 1px solid var(--border); }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <span class="brand-marker">▎</span>
+    VoIP Log Analyzer
+    <span class="brand-sub">// SIP signaling diagnostic</span>
+  </div>
+  <div class="header-spacer"></div>
+  <div class="health-dot" id="healthDot" title="Status do serviço"></div>
+</header>
+
+<main>
+  <!-- Left panel: input -->
+  <div class="panel-left">
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab('log')">Asterisk Log</button>
+      <button class="tab-btn" onclick="switchTab('pcap')">PCAP Capture</button>
+    </div>
+
+    <div id="tab-log" class="tab-pane active">
+      <div>
+        <label for="logTextarea">Colar log Asterisk</label>
+        <textarea id="logTextarea" placeholder="Cole aqui o conteúdo do full log do Asterisk (/var/log/asterisk/full).&#10;&#10;Suporta chan_sip e chan_pjsip.&#10;&#10;Habilite o log SIP antes de reproduzir o problema:&#10;  pjsip set logger on&#10;  sip set debug on"></textarea>
+      </div>
+
+      <div class="separator">ou</div>
+
+      <div>
+        <label>Upload de arquivo de log</label>
+        <div class="file-drop" id="logFileDrop">
+          <input type="file" id="logFileInput" accept=".log,.txt,.full,*" onchange="handleLogFile(this)" />
+          <div class="file-drop-text">
+            <strong>Selecionar arquivo</strong> ou arraste aqui<br />
+            .log · .txt · .full · qualquer texto
+          </div>
+          <div class="file-name" id="logFileName"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="tab-pcap" class="tab-pane">
+      <div>
+        <label>Upload de arquivo PCAP</label>
+        <div class="file-drop" id="pcapFileDrop">
+          <input type="file" id="pcapFileInput" accept=".pcap,.pcapng,.cap" onchange="handlePcapFile(this)" />
+          <div class="file-drop-text">
+            <strong>Selecionar arquivo</strong> ou arraste aqui<br />
+            .pcap · .pcapng · .cap<br /><br />
+            <span style="font-size:11px;color:var(--text-muted)">
+              Gerar PCAP: <code style="color:var(--accent)">tcpdump -i any -w cap.pcap -s 0 'port 5060'</code>
+            </span>
+          </div>
+          <div class="file-name" id="pcapFileName"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right panel: filters + analyze -->
+  <div class="panel-right">
+    <h2>Filtros</h2>
+
+    <div class="field-group">
+      <label for="filterCallId">Call-ID</label>
+      <input type="text" id="filterCallId" placeholder="Parte do Call-ID…" />
+    </div>
+
+    <div class="field-group">
+      <label for="filterSrc">Número de origem (From)</label>
+      <input type="text" id="filterSrc" placeholder="Ex: 1001, +5511…" />
+    </div>
+
+    <div class="field-group">
+      <label for="filterDst">Número de destino (To)</label>
+      <input type="text" id="filterDst" placeholder="Ex: 1002, +5521…" />
+    </div>
+
+    <div style="font-family:var(--mono);font-size:10px;color:var(--text-muted);line-height:1.6">
+      Filtros opcionais — substring case-insensitive.<br />
+      Deixe em branco para listar todas as chamadas.
+    </div>
+
+    <button class="btn-analyze" id="analyzeBtn" onclick="analyze()">Analisar →</button>
+  </div>
+
+  <!-- Results -->
+  <div id="results"></div>
+</main>
+
+<script>
+  // ── State ────────────────────────────────────────────────────────────────
+  let activeTab = 'log';
+  let logFile = null;
+  let pcapFile = null;
+
+  // ── Health check ─────────────────────────────────────────────────────────
+  async function checkHealth() {
+    try {
+      const r = await fetch('/api/health');
+      if (r.ok) document.getElementById('healthDot').classList.add('ok');
+    } catch {}
+  }
+
+  checkHealth();
+
+  // ── Tabs ─────────────────────────────────────────────────────────────────
+  function switchTab(tab) {
+    activeTab = tab;
+    document.querySelectorAll('.tab-btn').forEach((b, i) => {
+      b.classList.toggle('active', (i === 0 && tab === 'log') || (i === 1 && tab === 'pcap'));
+    });
+    document.getElementById('tab-log').classList.toggle('active', tab === 'log');
+    document.getElementById('tab-pcap').classList.toggle('active', tab === 'pcap');
+  }
+
+  // ── File handlers ─────────────────────────────────────────────────────────
+  function handleLogFile(input) {
+    logFile = input.files[0] || null;
+    document.getElementById('logFileName').textContent = logFile ? logFile.name : '';
+  }
+
+  function handlePcapFile(input) {
+    pcapFile = input.files[0] || null;
+    document.getElementById('pcapFileName').textContent = pcapFile ? pcapFile.name : '';
+  }
+
+  // Drag-and-drop
+  ['logFileDrop', 'pcapFileDrop'].forEach(id => {
+    const el = document.getElementById(id);
+    el.addEventListener('dragover', e => { e.preventDefault(); el.classList.add('drag-over'); });
+    el.addEventListener('dragleave', () => el.classList.remove('drag-over'));
+    el.addEventListener('drop', e => {
+      e.preventDefault();
+      el.classList.remove('drag-over');
+      const file = e.dataTransfer.files[0];
+      if (!file) return;
+      if (id === 'logFileDrop') {
+        logFile = file;
+        document.getElementById('logFileName').textContent = file.name;
+      } else {
+        pcapFile = file;
+        document.getElementById('pcapFileName').textContent = file.name;
+      }
+    });
+  });
+
+  // ── Analyze ───────────────────────────────────────────────────────────────
+  async function analyze() {
+    const btn = document.getElementById('analyzeBtn');
+    btn.disabled = true;
+    showSpinner();
+
+    const callId = document.getElementById('filterCallId').value.trim();
+    const src = document.getElementById('filterSrc').value.trim();
+    const dst = document.getElementById('filterDst').value.trim();
+
+    try {
+      let data;
+      if (activeTab === 'log') {
+        data = await analyzeLog(callId, src, dst);
+      } else {
+        data = await analyzePcap(callId, src, dst);
+      }
+      renderResults(data);
+    } catch (err) {
+      renderError(err.message || 'Erro ao conectar ao servidor.');
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  async function analyzeLog(callId, src, dst) {
+    const fd = new FormData();
+    const logText = document.getElementById('logTextarea').value;
+
+    if (logFile) {
+      fd.append('log_file', logFile);
+    } else if (logText.trim()) {
+      fd.append('log_text', logText);
+    } else {
+      throw new Error('Forneça o texto do log ou selecione um arquivo.');
+    }
+    fd.append('call_id', callId);
+    fd.append('src', src);
+    fd.append('dst', dst);
+
+    const r = await fetch('/api/analyze/log', { method: 'POST', body: fd });
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({}));
+      throw new Error(e.detail || `Erro HTTP ${r.status}`);
+    }
+    return r.json();
+  }
+
+  async function analyzePcap(callId, src, dst) {
+    if (!pcapFile) throw new Error('Selecione um arquivo PCAP para analisar.');
+    const fd = new FormData();
+    fd.append('pcap_file', pcapFile);
+    fd.append('call_id', callId);
+    fd.append('src', src);
+    fd.append('dst', dst);
+
+    const r = await fetch('/api/analyze/pcap', { method: 'POST', body: fd });
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({}));
+      throw new Error(e.detail || `Erro HTTP ${r.status}`);
+    }
+    return r.json();
+  }
+
+  // ── Render helpers ────────────────────────────────────────────────────────
+  function showSpinner() {
+    document.getElementById('results').innerHTML = `
+      <div class="spinner">
+        <div class="spinner-ring"></div>
+        Analisando…
+      </div>`;
+  }
+
+  function renderError(msg) {
+    document.getElementById('results').innerHTML = `
+      <div class="error-banner">⚠ ${esc(msg)}</div>`;
+  }
+
+  function esc(s) {
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function renderResults(data) {
+    const resultsEl = document.getElementById('results');
+
+    let html = '';
+
+    // Parse errors
+    if (data.parse_errors && data.parse_errors.length) {
+      html += `<div class="error-banner">⚠ ${data.parse_errors.map(esc).join('<br>')}</div>`;
+    }
+
+    // Summary
+    const sourceLabel = data.source === 'pcap' ? 'PCAP' : 'Asterisk Log';
+    html += `
+      <div class="summary-bar">
+        <span><strong>${data.total_calls}</strong> chamada${data.total_calls !== 1 ? 's' : ''}</span>
+        <span><strong>${data.total_sip_messages}</strong> mensagens SIP</span>
+        ${data.filters_applied.call_id ? `<span>Call-ID: <strong>${esc(data.filters_applied.call_id)}</strong></span>` : ''}
+        ${data.filters_applied.src ? `<span>From: <strong>${esc(data.filters_applied.src)}</strong></span>` : ''}
+        ${data.filters_applied.dst ? `<span>To: <strong>${esc(data.filters_applied.dst)}</strong></span>` : ''}
+        <span class="source-badge">${sourceLabel}</span>
+      </div>`;
+
+    if (data.calls.length === 0) {
+      html += `
+        <div class="empty-state">
+          <div class="empty-state-code">// nenhuma chamada encontrada</div>
+          <div>Ajuste os filtros ou verifique se o log contém mensagens SIP.</div>
+        </div>`;
+    } else {
+      html += '<div class="calls-list">';
+      for (const call of data.calls) {
+        html += renderCallCard(call);
+      }
+      html += '</div>';
+    }
+
+    resultsEl.innerHTML = html;
+  }
+
+  function renderCallCard(call) {
+    const verdict = call.verdict;
+    const verdictLabel = { error: 'Erro', success: 'Sucesso', cancelled: 'Cancelado', inconclusive: 'Indefinido' }[verdict] || verdict;
+
+    const fromDisplay = call.from_users.join(', ') || '—';
+    const toDisplay = call.to_users.join(', ') || '—';
+    const methodsDisplay = call.methods.join(' › ') || '—';
+    const finalResp = call.final_response != null ? String(call.final_response) : '—';
+
+    // Code pills
+    const SIP_CATEGORIES = {
+      1: 'provisional', 2: 'success', 3: 'redirect',
+      4: 'client_error', 5: 'server_error', 6: 'global_error'
+    };
+    let pillsHtml = '';
+    for (const code of call.all_responses) {
+      const cat = SIP_CATEGORIES[Math.floor(code / 100)] || 'unknown';
+      pillsHtml += `<span class="code-pill ${cat}" title="SIP ${code}">${code}</span>`;
+    }
+
+    // Diagnostics
+    let diagHtml = '';
+    if (call.diagnostics.length) {
+      diagHtml += `<div class="section-title">Diagnósticos (${call.diagnostics.length})</div>`;
+      for (const d of call.diagnostics) {
+        const isQ850 = d.type === 'q850';
+        diagHtml += `
+          <div class="diagnostic-block type-${d.type}">
+            <div class="diag-header">
+              <span class="diag-code ${isQ850 ? 'q850' : ''}">${isQ850 ? 'Q.850/' : 'SIP '}${d.code}</span>
+              <span class="diag-name">${esc(d.name)}</span>
+            </div>
+            <div class="diag-desc">${esc(d.description)}</div>`;
+
+        if (d.causes && d.causes.length) {
+          diagHtml += `<div class="diag-section-label">Causas comuns</div><ul class="diag-list">`;
+          for (const c of d.causes) diagHtml += `<li>${formatInlineCode(esc(c))}</li>`;
+          diagHtml += `</ul>`;
+        }
+        if (d.solutions && d.solutions.length) {
+          diagHtml += `<div class="diag-section-label">Soluções</div><ul class="diag-list solutions">`;
+          for (const s of d.solutions) diagHtml += `<li>${formatInlineCode(esc(s))}</li>`;
+          diagHtml += `</ul>`;
+        }
+        diagHtml += `</div>`;
+      }
+    }
+
+    // Heuristics
+    let heurHtml = '';
+    if (call.heuristics.length) {
+      heurHtml += `<div class="section-title">Heurísticas (${call.heuristics.length})</div>`;
+      for (const h of call.heuristics) {
+        heurHtml += `
+          <div class="heuristic-block severity-${h.severity}">
+            <div class="heuristic-header">
+              <span class="heuristic-icon">⚐</span>
+              <span class="heuristic-title">${esc(h.title)}</span>
+              <span class="severity-badge ${h.severity}">${esc(h.severity)}</span>
+            </div>
+            <div class="heuristic-desc">${esc(h.description)}</div>`;
+
+        if (h.solutions && h.solutions.length) {
+          heurHtml += `<div class="diag-section-label">Soluções</div><ul class="diag-list solutions">`;
+          for (const s of h.solutions) heurHtml += `<li>${formatInlineCode(esc(s))}</li>`;
+          heurHtml += `</ul>`;
+        }
+        heurHtml += `</div>`;
+      }
+    }
+
+    // Raw messages
+    const rawId = 'raw-' + Math.random().toString(36).slice(2);
+    let rawMsgsHtml = '';
+    for (const msg of call.messages) {
+      const isRequest = !!msg.method;
+      let typeClass = isRequest ? 'request' : 'response';
+      let label = isRequest ? msg.method : `${msg.status_code} ${msg.status_text || ''}`;
+      if (!isRequest && msg.status_code >= 200 && msg.status_code < 300) typeClass += ' ok';
+      if (!isRequest && msg.status_code >= 400) typeClass += ' err';
+
+      const metaParts = [];
+      if (msg.from_user) metaParts.push(`From: ${esc(msg.from_user)}`);
+      if (msg.to_user) metaParts.push(`To: ${esc(msg.to_user)}`);
+      if (msg.cseq_num != null) metaParts.push(`CSeq: ${msg.cseq_num} ${esc(msg.cseq_method || '')}`);
+      if (msg.timestamp) metaParts.push(new Date(msg.timestamp * 1000).toISOString());
+
+      rawMsgsHtml += `
+        <div class="raw-msg">
+          <div class="raw-msg-header">
+            <span class="raw-msg-type ${typeClass}">${esc(label.trim())}</span>
+            <span class="raw-msg-meta">${metaParts.join(' · ')}</span>
+          </div>
+          ${msg.raw ? `<pre class="raw-content">${esc(msg.raw)}</pre>` : ''}
+        </div>`;
+    }
+
+    return `
+      <div class="call-card verdict-${verdict}">
+        <div class="call-header">
+          <span class="call-id" title="${esc(call.call_id)}">${esc(call.call_id)}</span>
+          <span class="verdict-badge ${verdict}">${verdictLabel}</span>
+        </div>
+        <div class="call-body">
+          <div class="meta-grid">
+            <div class="meta-item">
+              <span class="meta-label">De (From)</span>
+              <span class="meta-value">${esc(fromDisplay)}</span>
+            </div>
+            <div class="meta-item">
+              <span class="meta-label">Para (To)</span>
+              <span class="meta-value">${esc(toDisplay)}</span>
+            </div>
+            <div class="meta-item">
+              <span class="meta-label">Métodos</span>
+              <span class="meta-value">${esc(methodsDisplay)}</span>
+            </div>
+            <div class="meta-item">
+              <span class="meta-label">Resposta final</span>
+              <span class="meta-value ${call.final_response == null ? 'dim' : ''}">${esc(finalResp)}</span>
+            </div>
+            <div class="meta-item">
+              <span class="meta-label">Mensagens</span>
+              <span class="meta-value">${call.message_count}</span>
+            </div>
+          </div>
+
+          ${pillsHtml ? `<div class="codes-row">${pillsHtml}</div>` : ''}
+
+          ${diagHtml || heurHtml ? '<div class="divider"></div>' : ''}
+
+          ${diagHtml}
+          ${heurHtml}
+
+          <button class="toggle-raw-btn" onclick="toggleRaw('${rawId}', this)">
+            Ver mensagens brutas (${call.message_count})
+          </button>
+          <div class="raw-messages" id="${rawId}">
+            ${rawMsgsHtml}
+          </div>
+        </div>
+      </div>`;
+  }
+
+  function toggleRaw(id, btn) {
+    const el = document.getElementById(id);
+    const isOpen = el.classList.toggle('open');
+    btn.textContent = isOpen
+      ? `Ocultar mensagens brutas`
+      : `Ver mensagens brutas (${el.querySelectorAll('.raw-msg').length})`;
+  }
+
+  // Converte `backtick strings` em <code> após esc()
+  function formatInlineCode(s) {
+    return s.replace(/`([^`]+)`/g, '<code>$1</code>');
+  }
+</script>
+</body>
+</html>
